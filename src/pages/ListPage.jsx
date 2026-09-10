@@ -44,17 +44,47 @@ export default function MyBookingsPage() {
     return () => unsub();
   }, [subscribe]);
 
-  const cancel = async (id) => {
-    const ok = await confirm({
-      title: 'ยืนยันยกเลิกการจอง',
-      message: 'คุณต้องการยกเลิกการจองนี้ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้',
-      confirmText: 'ยกเลิกการจอง',
-      variant: 'danger',
-    });
-    if (!ok) return;
+  const [cancelTarget, setCancelTarget] = useState(null);
+
+  const handleCancelClick = async (b) => {
+    if (b.seriesId) {
+      setCancelTarget(b);
+    } else {
+      const ok = await confirm({
+        title: 'ยืนยันยกเลิกการจอง',
+        message: 'คุณต้องการยกเลิกการจองนี้ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้',
+        confirmText: 'ยกเลิกการจอง',
+        variant: 'danger',
+      });
+      if (!ok) return;
+      try {
+        await api.cancelBooking(b.id);
+        showToast('ยกเลิกการจองสำเร็จ');
+        load();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+  };
+
+  const cancelSingle = async () => {
+    if (!cancelTarget) return;
     try {
-      await api.cancelBooking(id);
-      showToast('ยกเลิกการจองสำเร็จ');
+      await api.cancelBooking(cancelTarget.id);
+      showToast('ยกเลิกการจองรายการนี้เรียบร้อยแล้ว');
+      setCancelTarget(null);
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const cancelSeries = async () => {
+    if (!cancelTarget) return;
+    try {
+      const res = await api.cancelBookingSeries(cancelTarget.seriesId);
+      showToast(res.message || 'ยกเลิกการจองซ้ำทั้งชุดเรียบร้อยแล้ว');
+      setCancelTarget(null);
       load();
     } catch (err) {
       showToast(err.message, 'error');
@@ -134,7 +164,14 @@ export default function MyBookingsPage() {
             <tbody>
               {bookings.map((b) => (
                 <tr key={b.id} className="border-t border-slate-100 align-top dark:border-slate-800">
-                  <td className="p-3 font-semibold">{b.roomName}</td>
+                  <td className="p-3 font-semibold">
+                    <div>{b.roomName}</div>
+                    {b.seriesId && (
+                      <span className="inline-block mt-1 text-[11px] font-bold text-violet-700 bg-violet-100 dark:bg-violet-950/60 dark:text-violet-300 px-2 py-0.5 rounded-full">
+                        ↻ จองซ้ำรายสัปดาห์
+                      </span>
+                    )}
+                  </td>
                   <td className="p-3">{formatThaiDate(b.date)}</td>
                   <td className="p-3">{formatTime(b.start)}–{formatTime(b.end)}</td>
                   <td className="p-3">{formatEquipment(b)}</td>
@@ -153,7 +190,7 @@ export default function MyBookingsPage() {
                         <Button size="sm" variant="outline" onClick={() => setEditingBooking(b)}>แก้ไข</Button>
                       )}
                       {b.status !== 'cancelled' && (
-                        <Button size="sm" variant="danger" onClick={() => cancel(b.id)}>ยกเลิก</Button>
+                        <Button size="sm" variant="danger" onClick={() => handleCancelClick(b)}>ยกเลิก</Button>
                       )}
                     </div>
                   </td>
@@ -161,6 +198,31 @@ export default function MyBookingsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {cancelTarget && (
+        <div className="fixed inset-0 z-[200] grid place-items-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setCancelTarget(null)} />
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+              <span className="text-violet-600">↻</span> ยกเลิกการจองซ้ำรายสัปดาห์
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              รายการจองห้อง <span className="font-semibold text-slate-900 dark:text-white">{cancelTarget.roomName}</span> วันที่ {formatThaiDate(cancelTarget.date)} เป็นส่วนหนึ่งของการจองซ้ำรายสัปดาห์ คุณต้องการยกเลิกอย่างไร?
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <Button variant="danger" onClick={cancelSeries}>
+                ยกเลิกการจองซ้ำทั้งชุด (ทุกสัปดาห์)
+              </Button>
+              <Button variant="outline" onClick={cancelSingle}>
+                ยกเลิกเฉพาะรายการสัปดาห์นี้เท่านั้น
+              </Button>
+              <Button variant="ghost" onClick={() => setCancelTarget(null)}>
+                ปิดหน้าต่าง
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -261,7 +323,12 @@ export function ListPage() {
                   <td className="p-3">{formatThaiDate(b.date)}</td>
                   <td className="p-3">{formatTime(b.start)}–{formatTime(b.end)}</td>
                   <td className="p-3">{b.bookerName}</td>
-                  <td className="p-3">{[...b.purpose, ...b.subjects].join(', ') || '-'}</td>
+                  <td className="p-3">
+                    <div>{[...b.purpose, ...b.subjects].join(', ') || '-'}</div>
+                    {b.otherPurpose && (
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{b.otherPurpose}</div>
+                    )}
+                  </td>
                   <td className="p-3">{formatEquipment(b)}</td>
                   <td className="p-3"><Badge status={b.status} /></td>
                 </tr>

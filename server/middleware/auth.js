@@ -1,6 +1,12 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'room-booking-dev-secret-change-in-production';
+const isProd = process.env.NODE_ENV === 'production';
+export const JWT_SECRET = process.env.JWT_SECRET || (!isProd ? 'room-booking-dev-secret-change-in-production' : null);
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required in production mode. Refusing to start server with an insecure default.');
+}
+
 const JWT_EXPIRES = '7d';
 
 export function signToken(user) {

@@ -1,13 +1,24 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { getDb } from '../db/database.js';
+import { createUserLog } from '../db/database.js';
 import { signToken, authRequired } from '../middleware/auth.js';
 import { ADMIN_USERNAME } from '../data/constants.js';
+import { getAllSettings } from './settings.js';
 
 const router = Router();
 
-router.post('/login', (req, res) => {
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: { error: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณาลองใหม่ในอีก 15 นาที' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post('/login', loginLimiter, (req, res) => {
   const { username, password } = req.body || {};
   if (!username?.trim() || !password) {
     return res.status(400).json({ error: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
@@ -23,6 +34,16 @@ router.post('/login', (req, res) => {
   }
 
   const token = signToken(user);
+
+  // User Log: เข้าสู่ระบบสำเร็จ
+  createUserLog(getDb(), {
+    userId: user.id,
+    userName: user.display_name,
+    action: 'LOGIN',
+    details: `เข้าสู่ระบบสำเร็จ | username: ${user.username} | ยศ: ${user.role}`,
+    meta: { username: user.username, role: user.role },
+  });
+
   res.json({
     token,
     user: {
@@ -35,7 +56,7 @@ router.post('/login', (req, res) => {
   });
 });
 
-router.post('/register', (req, res) => {
+router.post('/register', loginLimiter, (req, res) => {
   const { displayName, username, password, passwordConfirm } = req.body || {};
   if (!displayName?.trim() || !username?.trim() || !password) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ' });
@@ -43,8 +64,8 @@ router.post('/register', (req, res) => {
   if (username.trim().length < 3) {
     return res.status(400).json({ error: 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร' });
   }
-  if (password.length < 4) {
-    return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร' });
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร' });
   }
   if (password !== passwordConfirm) {
     return res.status(400).json({ error: 'รหัสผ่านยืนยันไม่ตรงกัน' });
@@ -54,16 +75,35 @@ router.post('/register', (req, res) => {
   }
 
   const db = getDb();
+  const settings = getAllSettings(db);
+
+  if (settings.allow_registration === false) {
+    return res.status(403).json({ error: 'ระบบปิดรับการสมัครสมาชิกใหม่ชั่วคราวตามนโยบายของผู้ดูแลระบบ' });
+  }
+
   const exists = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(username.trim());
   if (exists) return res.status(409).json({ error: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว' });
 
   const hash = bcrypt.hashSync(password, 10);
   const id = randomUUID();
+  const initialApproved = settings.require_approval === false ? 1 : 0;
+
   db.prepare(
     'INSERT INTO users (id, username, password_hash, display_name, role, approved, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, username.trim(), hash, displayName.trim(), 'user', 0, Date.now());
+  ).run(id, username.trim(), hash, displayName.trim(), 'user', initialApproved, Date.now());
 
-  res.status(201).json({ message: 'สมัครสำเร็จ รอผู้ดูแลระบบอนุมัติ' });
+  res.status(201).json({
+    message: initialApproved ? 'สมัครสมาชิกสำเร็จ เข้าสู่ระบบได้ทันที' : 'สมัครสำเร็จ รอผู้ดูแลระบบอนุมัติ'
+  });
+
+  // User Log: สมัครสมาชิก
+  createUserLog(getDb(), {
+    userId: id,
+    userName: displayName.trim(),
+    action: 'REGISTER',
+    details: `สมัครสมาชิกใหม่ | username: ${username.trim()} | ชื่อแสดง: ${displayName.trim()} | สถานะ: ${initialApproved ? 'อนุมัติอัตโนมัติ' : 'รออนุมัติจากแอดมิน'}`,
+    meta: { username: username.trim(), autoApproved: Boolean(initialApproved) },
+  });
 });
 
 router.get('/me', authRequired, (req, res) => {
@@ -84,8 +124,8 @@ router.post('/change-password', authRequired, (req, res) => {
   if (!oldPassword || !newPassword || !newPasswordConfirm) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ' });
   }
-  if (newPassword.length < 4) {
-    return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร' });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 8 ตัวอักษร' });
   }
   if (newPassword !== newPasswordConfirm) {
     return res.status(400).json({ error: 'รหัสผ่านใหม่ไม่ตรงกัน' });
@@ -99,6 +139,16 @@ router.post('/change-password', authRequired, (req, res) => {
 
   const hash = bcrypt.hashSync(newPassword, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+
+  // User Log: เปลี่ยนรหัสผ่าน
+  createUserLog(db, {
+    userId: user.id,
+    userName: user.display_name,
+    action: 'CHANGE_PASSWORD',
+    details: `เปลี่ยนรหัสผ่านตนเองสำเร็จ | username: ${user.username}`,
+    meta: { username: user.username },
+  });
+
   res.json({ message: 'เปลี่ยนรหัสผ่านสำเร็จ' });
 });
 

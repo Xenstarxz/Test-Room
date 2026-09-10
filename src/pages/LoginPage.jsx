@@ -60,7 +60,7 @@ export default function LoginPage() {
           )}
           {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
           <Button type="submit" full loading={submitting}>{mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</Button>
-          
+
           <div className="flex items-center justify-between pt-1">
             <Button type="button" variant={mode === 'login' ? 'outline' : 'neutral'} size="sm" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>
               {mode === 'login' ? 'สมัครสมาชิก' : 'กลับเข้าสู่ระบบ'}

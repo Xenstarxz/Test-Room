@@ -1,6 +1,6 @@
 import { THAI_MONTHS, toDateKey, formatThaiDate, todayKey } from '../../utils/date.js';
 
-export default function Calendar({ selectedDate, onSelect, viewDate, onChangeMonth }) {
+export default function Calendar({ selectedDate, onSelect, viewDate, onChangeMonth, maxDate = null }) {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
@@ -23,18 +23,21 @@ export default function Calendar({ selectedDate, onSelect, viewDate, onChangeMon
         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
           const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const isPast = key < today;
+          const isFutureLimit = Boolean(maxDate && key > maxDate);
+          const isDisabled = isPast || isFutureLimit;
           const isSelected = key === selectedKey;
           const isToday = key === today;
           return (
             <button
               key={key}
               type="button"
-              disabled={isPast}
+              disabled={isDisabled}
               onClick={() => onSelect(key)}
+              title={isFutureLimit ? `เกินกำหนดจองล่วงหน้า` : undefined}
               className={`aspect-square rounded-full text-sm transition ${
                 isSelected ? 'bg-brand-500 font-bold text-white shadow-md' :
                 isToday ? 'border-2 border-accent-500 text-slate-700 dark:text-slate-200' :
-                isPast ? 'cursor-default text-slate-300 dark:text-slate-600' :
+                isDisabled ? 'cursor-default text-slate-300 dark:text-slate-600' :
                 'hover:bg-cyan-100 dark:hover:bg-cyan-950'
               }`}
             >

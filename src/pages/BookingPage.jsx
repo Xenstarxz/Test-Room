@@ -6,7 +6,7 @@ import Calendar from '../components/booking/Calendar.jsx';
 import TimeSelector, { validateTime } from '../components/booking/TimeSelector.jsx';
 import BookingModal from '../components/booking/BookingModal.jsx';
 import { Select } from '../components/ui/Input.jsx';
-import { dateFromKey, formatTime, toDateKey } from '../utils/date.js';
+import { dateFromKey, formatTime, toDateKey, addDaysToKey, todayKey } from '../utils/date.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
@@ -111,8 +111,11 @@ export default function BookingPage() {
     setEnd(Math.min(w.start + 1, w.end));
   };
 
+  const maxAdvanceDateKey = meta?.advanceBookingDays ? addDaysToKey(todayKey(), meta.advanceBookingDays) : null;
+
   const openBooking = (room) => {
     if (room.status === 'maintenance') return showToast('ห้องนี้ถูกปิดปรับปรุงชั่วคราว ไม่สามารถจองได้', 'error');
+    if (room.disabledReason) return showToast(room.disabledReason, 'error');
     if (timeError) return showToast(timeError, 'error');
     if (room.busy) return showToast('ห้องถูกจองในช่วงเวลานี้แล้ว', 'error');
     setModalRoom(room);
@@ -123,50 +126,56 @@ export default function BookingPage() {
 
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <Card title="1. เลือกวันที่" icon="▣">
-        <Calendar
-          selectedDate={selectedDate}
-          viewDate={viewDate}
-          onSelect={onSelectDate}
-          onChangeMonth={(dir) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + dir, 1))}
-        />
-        <div className="mt-3 max-h-40 space-y-2 overflow-auto">
-          <p className="text-xs font-bold text-slate-500">รายการจองวันนี้</p>
-          {dayBookings.length === 0 ? (
-            <p className="text-xs text-slate-400">ไม่มีรายการจอง</p>
-          ) : dayBookings.map((b) => (
-            <div key={b.id} className="rounded-lg border-l-4 border-amber-400 bg-amber-50 p-2 text-xs dark:bg-amber-950/30">
-              <strong>{b.roomName}</strong> · {formatTime(b.start)}–{formatTime(b.end)}
-              <Badge status={b.status} />
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card title="2. เลือกช่วงเวลา" icon="◷">
-        <div className="grid gap-3">
-          <Select label="ช่วงเวลา" value={period} onChange={(e) => onPeriodChange(e.target.value)}>
-            {Object.entries(meta.timeWindows).map(([key, w]) => (
-              <option key={key} value={key}>{w.label} ({formatTime(w.start)}–{formatTime(w.end)})</option>
+      <div data-tour="step-date">
+        <Card title="1. เลือกวันที่" icon="▣">
+          <Calendar
+            selectedDate={selectedDate}
+            viewDate={viewDate}
+            onSelect={onSelectDate}
+            maxDate={maxAdvanceDateKey}
+            onChangeMonth={(dir) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + dir, 1))}
+          />
+          <div className="mt-3 max-h-40 space-y-2 overflow-auto">
+            <p className="text-xs font-bold text-slate-500">รายการจองวันนี้</p>
+            {dayBookings.length === 0 ? (
+              <p className="text-xs text-slate-400">ไม่มีรายการจอง</p>
+            ) : dayBookings.map((b) => (
+              <div key={b.id} className="rounded-lg border-l-4 border-amber-400 bg-amber-50 p-2 text-xs dark:bg-amber-950/30">
+                <strong>{b.roomName}</strong> · {formatTime(b.start)}–{formatTime(b.end)}
+                <Badge status={b.status} />
+              </div>
             ))}
-          </Select>
-          {period !== 'fullday' ? (
-            <TimeSelector
-              period={period}
-              timeWindows={meta.timeWindows}
-              start={start}
-              end={end}
-              onStartChange={setStart}
-              onEndChange={setEnd}
-              error={timeError}
-            />
-          ) : (
-            <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800 dark:bg-green-950/40">จองทั้งวัน 08:00–16:00</p>
-          )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
 
-      <Card title="3. เลือกห้อง" icon="▤" note="อัปเดตอัตโนมัติทุก 10 วินาที" className="xl:col-span-1">
+      <div data-tour="step-time">
+        <Card title="2. เลือกช่วงเวลา" icon="◷">
+          <div className="grid gap-3">
+            <Select label="ช่วงเวลา" value={period} onChange={(e) => onPeriodChange(e.target.value)}>
+              {Object.entries(meta.timeWindows).map(([key, w]) => (
+                <option key={key} value={key}>{w.label} ({formatTime(w.start)}–{formatTime(w.end)})</option>
+              ))}
+            </Select>
+            {period !== 'fullday' ? (
+              <TimeSelector
+                period={period}
+                timeWindows={meta.timeWindows}
+                start={start}
+                end={end}
+                onStartChange={setStart}
+                onEndChange={setEnd}
+                error={timeError}
+              />
+            ) : (
+              <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800 dark:bg-green-950/40">จองทั้งวัน 08:00–16:00</p>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <div data-tour="step-room">
+        <Card title="3. เลือกห้อง" icon="▤" note="อัปเดตอัตโนมัติทุก 10 วินาที" className="xl:col-span-1">
         <div className="mb-3 space-y-2">
           <div className="flex items-center gap-2">
             <input
@@ -253,6 +262,7 @@ export default function BookingPage() {
           )}
         </div>
       </Card>
+      </div>
 
       <BookingModal
         open={Boolean(modalRoom)}

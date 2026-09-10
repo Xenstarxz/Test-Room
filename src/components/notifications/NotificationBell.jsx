@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 
+import { useSocket } from '../../context/SocketContext.jsx';
+
 function timeAgo(ts) {
   const diffSec = Math.floor((Date.now() - ts) / 1000);
   if (diffSec < 60) return 'เมื่อสักครู่';
@@ -19,18 +21,28 @@ const typeIcon = {
 };
 
 export default function NotificationBell() {
+  const { subscribe } = useSocket();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const wrapRef = useRef(null);
 
+  const fetchCount = () => api.getUnreadNotificationCount().then((d) => setUnreadCount(d.count)).catch(() => {});
+
   useEffect(() => {
-    const fetchCount = () => api.getUnreadNotificationCount().then((d) => setUnreadCount(d.count)).catch(() => {});
     fetchCount();
     const id = setInterval(fetchCount, 15000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const unsub = subscribe('NOTIFICATION_NEW', (data) => {
+      setUnreadCount((c) => c + 1);
+      api.getNotifications().then((list) => setNotifications(list)).catch(() => {});
+    });
+    return () => unsub();
+  }, [subscribe]);
 
   useEffect(() => {
     if (!open) return undefined;

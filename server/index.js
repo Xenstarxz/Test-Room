@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import path from 'path';
 import { createServer } from 'http';
@@ -10,8 +11,11 @@ import userRoutes from './routes/users.js';
 import statsRoutes from './routes/stats.js';
 import notificationRoutes from './routes/notifications.js';
 import auditRoutes from './routes/audit.js';
+import settingsRoutes from './routes/settings.js';
 import { getDb } from './db/database.js';
 import { initSocket } from './utils/socket.js';
+import { runBackup } from './utils/backup.js';
+import { runRetention } from './utils/retention.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -19,11 +23,19 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
+// Security Headers
+app.use(helmet({ contentSecurityPolicy: false }));
+
 // Initialize Real-time WebSockets
 initSocket(httpServer);
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: isProd ? true : ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: isProd && allowedOrigins.length ? allowedOrigins : (isProd ? true : ['http://localhost:5173', 'http://127.0.0.1:5173']),
   credentials: true,
 }));
 app.use(express.json());
@@ -40,6 +52,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/settings', settingsRoutes);
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'ไม่พบ API endpoint' });
@@ -65,4 +78,12 @@ app.use((err, _req, res, _next) => {
 httpServer.listen(PORT, '0.0.0.0', () => {
   getDb();
   console.log(`API server & Real-Time WebSockets running at http://localhost:${PORT}`);
+  
+  // รัน backup และ retention 1 ครั้งทันทีตอนเปิดเครื่อง แล้วตั้งทุก 24 ชั่วโมง (86400000 ms)
+  runBackup();
+  runRetention();
+  setInterval(() => {
+    runBackup();
+    runRetention();
+  }, 24 * 60 * 60 * 1000);
 });

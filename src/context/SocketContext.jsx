@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext.jsx';
 import { useToast } from './ToastContext.jsx';
+import { getToken } from '../api/client.js';
 
 const SocketContext = createContext({
   socket: null,
@@ -16,10 +17,18 @@ export function SocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
+    if (!user?.id) {
+      setSocket(null);
+      setConnected(false);
+      return;
+    }
+
     const isProd = import.meta.env.PROD;
     const socketUrl = isProd ? window.location.origin : 'http://localhost:3001';
+    const token = getToken();
 
     const socketInstance = io(socketUrl, {
+      auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
@@ -28,9 +37,6 @@ export function SocketProvider({ children }) {
 
     socketInstance.on('connect', () => {
       setConnected(true);
-      if (user?.id) {
-        socketInstance.emit('join_user', user.id);
-      }
     });
 
     socketInstance.on('disconnect', () => {
@@ -48,13 +54,7 @@ export function SocketProvider({ children }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, []);
-
-  useEffect(() => {
-    if (socket && connected && user?.id) {
-      socket.emit('join_user', user.id);
-    }
-  }, [socket, connected, user?.id]);
+  }, [user?.id]);
 
   const subscribe = (event, callback) => {
     if (!socket) return () => {};

@@ -39,6 +39,12 @@ export function isFutureOrToday(key) {
   return isDateKey(key) && key >= todayKey();
 }
 
+export function isWithinAdvanceDays(key, advanceDays = 90) {
+  if (!isDateKey(key)) return false;
+  const maxKey = addDaysToKey(todayKey(), Number(advanceDays) || 90);
+  return key <= maxKey;
+}
+
 export function findConflicts(bookings, { date, roomId, start, end, ignoreBookingId = null }) {
   return bookings.filter(
     (b) =>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สรุป v6 — ผลตรวจสอบ + ฟังก์ชันที่ควรอัปเกรด</title>
+<style>
+  :root{
+    --ink:#1c2321;
+    --paper:#faf8f4;
+    --paper-raised:#ffffff;
+    --line:#e4e0d6;
+    --brand:#0f6e5c;
+    --brand-soft:#e4f2ee;
+    --amber:#a86a17;
+    --amber-soft:#fbf1de;
+    --red:#a3352b;
+    --red-soft:#fbeae8;
+    --violet:#5b4b8a;
+    --violet-soft:#efeaf7;
+    --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"IBM Plex Sans Thai","Noto Sans Thai","Segoe UI",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.65;
+  }
+  .wrap{max-width:940px;margin:0 auto;padding:56px 24px 100px;}
+  header.hero{border-bottom:2px solid var(--ink);padding-bottom:28px;margin-bottom:40px;}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);margin:0 0 10px;}
+  h1{font-size:clamp(28px,4vw,40px);line-height:1.2;margin:0 0 12px;font-weight:800;}
+  .lead{font-size:16px;color:#4b544f;max-width:64ch;margin:0;}
+  .meta-row{display:flex;gap:18px;flex-wrap:wrap;margin-top:20px;font-family:var(--mono);font-size:12.5px;color:#6b746e;}
+  .meta-row span b{color:var(--ink);}
+  .verify-badge{display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand);font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;margin-top:16px;}
+
+  h2{font-size:22px;margin:56px 0 6px;display:flex;align-items:baseline;gap:10px;}
+  h2 .num{font-family:var(--mono);font-size:14px;color:var(--brand);font-weight:700;}
+  .section-lead{color:#5c655f;font-size:14.5px;margin:0 0 22px;max-width:70ch;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.6px;margin-top:6px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#7a827c;font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+  td.status-done{color:var(--brand);font-weight:600;}
+
+  .grid{display:grid;gap:14px;}
+  @media(min-width:720px){ .grid.cols-2{grid-template-columns:1fr 1fr;} }
+
+  .card{background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .card h3{margin:0 0 6px;font-size:15px;font-weight:700;display:flex;gap:8px;align-items:center;}
+  .card p{margin:0;font-size:13.6px;color:#565f5a;}
+  .card .why{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:12.6px;color:#7a827c;}
+  .card .why b{color:#4b544f;}
+
+  .pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:99px;flex-shrink:0;}
+  .pill.high{background:var(--red-soft);color:var(--red);}
+  .pill.mid{background:var(--amber-soft);color:var(--amber);}
+  .pill.low{background:var(--brand-soft);color:var(--brand);}
+  .pill.done{background:var(--brand-soft);color:var(--brand);}
+  .pill.note{background:var(--violet-soft);color:var(--violet);}
+
+  code.inline{background:#f1efe9;color:#4b544f;border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:12.3px;}
+  pre{background:#1c2321;color:#eef0ea;border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.55;margin:10px 0 0;}
+  pre .cm{color:#8a938d;}
+
+  .flow{display:flex;flex-direction:column;gap:0;border-left:2px solid var(--line);margin-left:6px;}
+  .flow-step{position:relative;padding:0 0 24px 26px;}
+  .flow-step:last-child{padding-bottom:0;}
+  .flow-step::before{content:"";position:absolute;left:-7px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--paper);border:2px solid var(--brand);}
+  .flow-step h4{margin:0 0 4px;font-size:14px;}
+  .flow-step p{margin:0;font-size:13.2px;color:#5c655f;}
+
+  .callout{background:var(--brand-soft);border:1px solid #c6e3da;border-radius:12px;padding:16px 18px;font-size:13.6px;color:#194a3d;margin-top:18px;}
+  .callout b{color:#0f6e5c;}
+  .callout.warn{background:var(--amber-soft);border-color:#eddcb5;color:#5c4114;}
+  .callout.warn b{color:var(--amber);}
+
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:12.5px;color:#8a938d;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Verification Report — v6</p>
+    <h1>สรุป v6 — ผลตรวจสอบ<br>+ ฟังก์ชันที่ควรอัปเกรด</h1>
+    <p class="lead">ตรวจตาม checklist 4 ข้อที่ค้างไว้จากรอบก่อน ด้วยการรันเซิร์ฟเวอร์จริงและยิง API ทดสอบ พบว่าแก้ถูกต้องครบ 3/4 อย่างชัดเจน ระหว่างตรวจพบ 2 จุดใหม่ที่ควรอัปเกรดเพิ่ม</p>
+    <div class="meta-row">
+      <span>ยืนยันแล้ว: <b>3 ข้อ</b></span>
+      <span>พบใหม่: <b>2 ข้อ</b></span>
+      <span>Build: <b>ผ่าน ไม่มี error</b></span>
+    </div>
+    <div class="verify-badge">✓ ทดสอบด้วยการรันจริง (curl + server) ไม่ใช่แค่อ่านโค้ด</div>
+  </header>
+
+  <!-- ============ SECTION 1: VERIFIED FIXES ============ -->
+  <section>
+    <h2><span class="num">01</span> ผลตรวจ Checklist เดิม 4 ข้อ</h2>
+    <table>
+      <thead><tr><th style="width:32%">รายการ</th><th style="width:16%">สถานะ</th><th style="width:52%">หลักฐานการตรวจสอบ</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Series cancel — Authorization</td>
+          <td class="status-done">✓ ถูกต้อง</td>
+          <td>ทดสอบจริง: non-owner ยกเลิก series คนอื่น → 403, เจ้าของยกเลิกเอง → 200, ยกเลิกซ้ำ (cancelled หมดแล้ว) → 400 ครบทั้ง 3 เคส</td>
+        </tr>
+        <tr>
+          <td>Backup — รันทันทีตอน start</td>
+          <td class="status-done">✓ ถูกต้อง</td>
+          <td>เห็น log <code class="inline">[Backup] ... backed up successfully</code> ทันทีที่เปิดเซิร์ฟเวอร์ ไม่ต้องรอ 24 ชม.แรก</td>
+        </tr>
+        <tr>
+          <td>Settings — แยกไฟล์ <code class="inline">settings.js</code></td>
+          <td class="status-done">✓ ถูกต้อง</td>
+          <td>แยกไฟล์ตามแพทเทิร์นเดิม และ <code class="inline">blackout_dates</code> / <code class="inline">allow_bookings</code> ถูกบังคับใช้จริงตอนสร้าง booking ไม่ใช่แค่เก็บไว้เฉยๆ</td>
+        </tr>
+        <tr>
+          <td>Maintenance badge (ตรวจซ้ำ)</td>
+          <td class="status-done">✓ ถูกต้อง</td>
+          <td>ยังอยู่ที่ <code class="inline">BookingPage.jsx</code> เหมือนเดิม การ์ดห้องโชว์ badge + block การคลิกก่อนเปิด modal</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ SECTION 2: NEW FINDINGS ============ -->
+  <section>
+    <h2><span class="num">02</span> พบใหม่ — ฟังก์ชันที่ควรอัปเกรด</h2>
+    <p class="section-lead">เจอระหว่างตรวจ checklist เดิม ไม่ใช่บัคที่ทำให้ระบบพัง แต่เป็นฟีเจอร์ที่ "มีโครงไว้แล้วแต่ยังไม่ทำงานเต็มรูปแบบ"</p>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <h3><span class="pill high">high</span> Onboarding Tour ถูกปิดไว้ (no-op)</h3>
+        <p><code class="inline">src/utils/tour.js</code> ทั้งไฟล์เหลือแค่:</p>
+        <pre>export function startOnboardingTour() {
+  <span class="cm">// Tour disabled per user request</span>
+}</pre>
+        <div class="why"><b>สถานะ:</b> <code class="inline">driver.js</code> ไม่ได้อยู่ใน <code class="inline">package.json</code> เลย (ไม่ได้ติดตั้ง) แต่ UI เตรียม anchor point ไว้ครบแล้ว (<code class="inline">data-tour="step-date"</code>, <code class="inline">data-tour="nav-..."</code>) — เหมือนสร้างโครงไว้แล้วแต่ตัวทัวร์จริงถูกปิด ส่วน Tooltip "?" (อีกครึ่งของฟีเจอร์นี้) ทำงานปกติดี</div>
+      </div>
+
+      <div class="card">
+        <h3><span class="pill mid">mid</span> <code class="inline">advance_booking_days</code> ยังไม่ถูกบังคับใช้</h3>
+        <p>ตั้งค่าไว้ใน settings (ดีฟอลต์ 90 วัน) แต่ไม่มีจุดไหนใน <code class="inline">bookings.js</code> เช็คว่าวันที่จองเกินจำนวนวันล่วงหน้าที่กำหนดหรือไม่</p>
+        <div class="why"><b>เทียบกับ:</b> <code class="inline">blackout_dates</code> / <code class="inline">allow_bookings</code> ที่ถูกบังคับใช้จริงแล้วในไฟล์เดียวกัน — เป็นแพทเทิร์นเดียวกับที่เคยเจอตอน <code class="inline">seriesId</code> ก่อนหน้านี้ (ข้อมูลพร้อมแต่ยังไม่ผูกใช้งานจริง)</div>
+      </div>
+
+      <div class="card">
+        <h3><span class="pill low">low</span> Endpoint ซ้ำซ้อนใน bookings.js</h3>
+        <p><code class="inline">POST /series/:seriesId/cancel</code> และ <code class="inline">DELETE /series/:seriesId</code> ทำงานเหมือนกันเป๊ะ แต่ frontend เรียกใช้แค่ตัวแรก</p>
+        <div class="why"><b>ผลกระทบ:</b> ไม่กระทบการทำงาน แค่เป็นโค้ดที่ไม่ได้ใช้ ควร cleanup เพื่อลดความสับสนตอนแก้ไขในอนาคต</div>
+      </div>
+
+      <div class="card">
+        <h3><span class="pill low">low</span> ยกเลิก series แล้วเจ้าของไม่ได้รับ notification</h3>
+        <p>endpoint อื่นๆ (เช่น admin ปฏิเสธ booking เดี่ยว) จะสร้าง in-app notification ให้เจ้าของเสมอ แต่ series-cancel ไม่สร้างเลย</p>
+        <div class="why"><b>ผลกระทบ:</b> ถ้า admin ยกเลิก series ของ user คนอื่น เจ้าของจะไม่รู้เลยจนกว่าจะเข้ามาเช็คเอง — ไม่สอดคล้องกับ flow แจ้งเตือนที่ทำไว้ในจุดอื่น</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 3: UPGRADE PRIORITY ============ -->
+  <section>
+    <h2><span class="num">03</span> ลำดับที่แนะนำให้อัปเกรด</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <h4>1. ตัดสินใจเรื่อง Onboarding Tour ก่อนอื่น</h4>
+        <p>ต้องยืนยันกับตัวเองก่อนว่า "ตั้งใจปิดไว้จริงไหม" — ถ้าใช่ ไม่ต้องทำอะไร ถ้าไม่ตั้งใจ นี่คือฟีเจอร์ high-priority ที่ยังไม่ทำงานจริง ต้องติดตั้ง <code class="inline">driver.js</code> แล้วเขียน logic จริงแทนฟังก์ชัน no-op</p>
+      </div>
+      <div class="flow-step">
+        <h4>2. เพิ่มเช็ค <code class="inline">advance_booking_days</code> ใน bookings.js</h4>
+        <p>เพิ่มเงื่อนไขเดียว เทียบวันที่จองกับ <code class="inline">今日 + advance_booking_days</code> ก่อน insert — ใช้ pattern เดียวกับที่ <code class="inline">blackout_dates</code> ทำไว้แล้วได้เลย ไม่ต้องออกแบบใหม่</p>
+      </div>
+      <div class="flow-step">
+        <h4>3. เพิ่ม notification ให้เจ้าของตอน series ถูกยกเลิก</h4>
+        <p>เรียก <code class="inline">createNotification()</code> ที่มีอยู่แล้วในไฟล์เดียวกัน เพิ่มแค่ 1 บล็อกโค้ดในจุดที่ยกเลิก series สำเร็จ</p>
+      </div>
+      <div class="flow-step">
+        <h4>4. ลบ endpoint ที่ซ้ำซ้อนออก</h4>
+        <p>ลบ <code class="inline">DELETE /series/:seriesId</code> ทิ้ง เหลือแค่ <code class="inline">POST /series/:seriesId/cancel</code> ที่ frontend ใช้จริง</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <b>สิ่งที่ต้องเช็คก่อนอัปเกรดข้อ 1:</b> ค้นหาในประวัติการทำงาน/บทสนทนาก่อนหน้านี้ว่าทำไม tour ถึงถูกปิดไว้ — คอมเมนต์บอกว่า "disabled per user request" ซึ่งอาจเป็นคำสั่งจริงที่เคยให้ไว้นอกบทสนทนานี้ ควรยืนยันความตั้งใจก่อนเปิดกลับมาใช้
+    </div>
+  </section>
+
+  <footer>
+    สรุปจากการตรวจสอบ v6 ด้วยการรันเซิร์ฟเวอร์จริงและ build ทดสอบ — ครอบคลุม checklist เดิม 4 ข้อ พร้อมสิ่งที่พบใหม่ระหว่างตรวจ
+  </footer>
+
+</div>
+</body>
+</html>

@@ -70,6 +70,11 @@ router.get('/dashboard', authRequired, (req, res) => {
   res.json({ todayBookings, myBookings, adminStats });
 });
 
+function sanitizeCsvField(value) {
+  const str = String(value ?? '');
+  return /^[=+\-@]/.test(str) ? `'${str}` : str;
+}
+
 router.get('/export', authRequired, adminRequired, (req, res) => {
   const { dateFrom, dateTo, roomId } = req.query;
   const db = getDb();
@@ -84,13 +89,13 @@ router.get('/export', authRequired, adminRequired, (req, res) => {
 
   const header = ['ห้อง', 'วันที่', 'เริ่ม', 'สิ้นสุด', 'ผู้จอง', 'วัตถุประสงค์', 'สถานะ'];
   const csvRows = rows.map((b) => [
-    b.roomName,
-    b.date,
-    formatTime(b.start),
-    formatTime(b.end),
-    b.bookerName,
-    [...b.purpose, ...(b.subjects || [])].join('; '),
-    b.status,
+    sanitizeCsvField(b.roomName),
+    sanitizeCsvField(b.date),
+    sanitizeCsvField(formatTime(b.start)),
+    sanitizeCsvField(formatTime(b.end)),
+    sanitizeCsvField(b.bookerName),
+    sanitizeCsvField([...b.purpose, ...(b.subjects || [])].join('; ')),
+    sanitizeCsvField(b.status),
   ]);
 
   const bom = '\uFEFF';

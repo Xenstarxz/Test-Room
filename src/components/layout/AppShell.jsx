@@ -16,6 +16,7 @@ const tabs = [
   { to: '/my-bookings', label: 'การจองของฉัน' },
   { to: '/list', label: 'รายการจอง' },
   { to: '/stats', label: 'สถิติ' },
+  { to: '/guide', label: 'วิธีใช้งาน' },
   { to: '/admin', label: 'จัดการระบบ', admin: true },
 ];
 
@@ -75,7 +76,9 @@ export default function AppShell() {
             <Button variant="ghost" size="sm" className="!text-white hover:!bg-white/20" onClick={toggleTheme}>
               {isDark ? '☀' : '☾'}
             </Button>
-            <NotificationBell />
+            <div data-tour="notification-bell">
+              <NotificationBell />
+            </div>
             <div className="relative">
               <Button variant="ghost" size="sm" className="!text-white hover:!bg-white/20" onClick={() => setMenuOpen((v) => !v)}>
                 {isAdmin && <span className="mr-1 rounded bg-white/20 px-1.5 text-[10px] font-extrabold">Admin</span>}
@@ -101,6 +104,7 @@ export default function AppShell() {
           <NavLink
             key={tab.to}
             to={tab.to}
+            data-tour={`nav-${tab.to.replace('/', '')}`}
             className={({ isActive }) =>
               `shrink-0 rounded-xl border px-5 py-2 text-sm font-bold transition-all ${
                 isActive

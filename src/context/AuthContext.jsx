@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, isAdmin: user?.isAdmin }),
+    () => ({ user, loading, login, register, logout, isAdmin: user?.role === 'admin' || Boolean(user?.isAdmin) }),
     [user, loading]
   );
 

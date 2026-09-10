@@ -24,11 +24,18 @@ export function getDb() {
 
 // Migration แบบ additive: เพิ่มคอลัมน์/ตารางใหม่โดยไม่ทำลายข้อมูลเดิม
 // เผื่อกรณีมี room-booking.db เก่าอยู่แล้วจากก่อนอัปเดตฟีเจอร์นี้
-export function createAuditLog(database, { adminId, adminName, action, details }) {
+export function createAuditLog(database, { adminId, adminName, action, details, target = null }) {
   database.prepare(`
-    INSERT INTO audit_logs (id, admin_id, admin_name, action, details, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), adminId, adminName, action, details, Date.now());
+    INSERT INTO audit_logs (id, admin_id, admin_name, action, details, target, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(randomUUID(), adminId, adminName, action, details, target || null, Date.now());
+}
+
+export function createUserLog(database, { userId, userName, action, details, meta = null }) {
+  database.prepare(`
+    INSERT INTO user_logs (id, user_id, user_name, action, details, meta, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(randomUUID(), userId, userName, action, details, meta ? JSON.stringify(meta) : null, Date.now());
 }
 
 function migrateSchema(database) {
@@ -43,6 +50,12 @@ function migrateSchema(database) {
   const roomCols = database.prepare('PRAGMA table_info(rooms)').all().map((c) => c.name);
   if (!roomCols.includes('status')) {
     database.exec("ALTER TABLE rooms ADD COLUMN status TEXT DEFAULT 'active'");
+  }
+
+  // migrate audit_logs: เพิ่ม target column ถ้าไม่มี
+  const auditCols = database.prepare('PRAGMA table_info(audit_logs)').all().map((c) => c.name);
+  if (auditCols.length > 0 && !auditCols.includes('target')) {
+    database.exec('ALTER TABLE audit_logs ADD COLUMN target TEXT');
   }
 
   database.exec(`
@@ -65,10 +78,39 @@ function migrateSchema(database) {
       admin_name TEXT NOT NULL,
       action TEXT NOT NULL,
       details TEXT NOT NULL,
+      target TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT NOT NULL,
+      meta TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_logs_created ON user_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_logs(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
+
+  // Seed default settings if not exists
+  const existingDays = database.prepare("SELECT value FROM settings WHERE key = 'advance_booking_days'").get();
+  if (!existingDays) {
+    database.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('advance_booking_days', '90', ?)").run(Date.now());
+  }
+  const existingBlackout = database.prepare("SELECT value FROM settings WHERE key = 'blackout_dates'").get();
+  if (!existingBlackout) {
+    database.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('blackout_dates', '[]', ?)").run(Date.now());
+  }
 }
 
 

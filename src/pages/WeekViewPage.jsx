@@ -6,6 +6,7 @@ import { Select } from '../components/ui/Input.jsx';
 import { EmptyState } from '../components/ui/Badge.jsx';
 import { addDaysToKey, startOfWeekKey, formatThaiDate, formatTime, THAI_WEEKDAYS_SHORT, todayKey } from '../utils/date.js';
 import { useSocket } from '../context/SocketContext.jsx';
+import BookingModal from '../components/booking/BookingModal.jsx';
 
 export default function WeekViewPage() {
   const { subscribe } = useSocket();
@@ -13,6 +14,8 @@ export default function WeekViewPage() {
   const [roomFilter, setRoomFilter] = useState('');
   const [rooms, setRooms] = useState([]);
   const [data, setData] = useState(null);
+  const [meta, setMeta] = useState(null);
+  const [modalData, setModalData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchWeekData = useCallback(() => {
@@ -24,6 +27,7 @@ export default function WeekViewPage() {
 
   useEffect(() => {
     api.getRooms().then(setRooms);
+    api.getRoomMeta().then(setMeta);
   }, []);
 
   useEffect(() => {
@@ -53,8 +57,17 @@ export default function WeekViewPage() {
     return `${formatThaiDate(data.days[0])} – ${formatThaiDate(data.days[6])}`;
   }, [data]);
 
+  const handleCellClick = (room, dateKey) => {
+    if (room.status === 'maintenance') return;
+    if (dateKey < today) return; // ไม่อนุญาตให้จองวันที่ผ่านมาแล้ว
+    setModalData({
+      room: { id: room.id, name: room.name, capacity: room.capacity, building: room.building, status: room.status },
+      date: dateKey,
+    });
+  };
+
   return (
-    <Card title="ห้องว่างรายสัปดาห์" icon="🗓️" note="ดูภาพรวมการจองทั้งสัปดาห์ในครั้งเดียว ไม่ต้องเช็คทีละวัน">
+    <Card title="ห้องว่างรายสัปดาห์" icon="🗓️" note="คลิกช่องวันที่ต้องการเพื่อจองห้องทันที (เฉพาะวันปัจจุบันและอนาคต)">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => goWeek(-1)} aria-label="สัปดาห์ก่อนหน้า">‹</Button>
@@ -84,11 +97,11 @@ export default function WeekViewPage() {
                   <th
                     key={date}
                     className={`min-w-[130px] p-2 text-center font-bold ${
-                      date === today ? 'text-brand-600 dark:text-brand-400' : 'text-slate-500'
+                      date === today ? 'text-brand-600 dark:text-brand-400 font-extrabold' : date < today ? 'text-slate-400 opacity-60' : 'text-slate-500'
                     }`}
                   >
                     <div>{THAI_WEEKDAYS_SHORT[i]}</div>
-                    <div className="text-[10px] font-normal text-slate-400">{formatThaiDate(date).split(' ').slice(0, 2).join(' ')}</div>
+                    <div className="text-[10px] font-normal">{formatThaiDate(date).split(' ').slice(0, 2).join(' ')}</div>
                   </th>
                 ))}
               </tr>
@@ -100,31 +113,75 @@ export default function WeekViewPage() {
                     <p className="font-bold text-slate-800 dark:text-slate-100">{room.name}</p>
                     <p className="text-[10px] text-slate-400">{room.capacity} · {room.building}</p>
                   </td>
-                  {room.days.map((day) => (
-                    <td key={day.date} className={`p-1.5 align-top ${day.date === today ? 'bg-brand-50/40 dark:bg-brand-950/20' : ''}`}>
-                      {day.bookings.length === 0 ? (
-                        <span className="block rounded-lg bg-green-50 px-2 py-1 text-center text-[10px] font-bold text-green-700 dark:bg-green-950/30 dark:text-green-400">ว่างทั้งวัน</span>
-                      ) : (
-                        <div className="grid gap-1">
-                          {day.bookings.map((b, idx) => (
-                            <span
-                              key={idx}
-                              className="block rounded-lg border border-red-200 bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
-                              title={`${b.bookerName} (${b.purpose?.join(', ') || 'จองแล้ว'})`}
-                            >
-                              {formatTime(b.start)}–{formatTime(b.end)} {b.bookerName ? `· ${b.bookerName}` : ''}
+                  {room.days.map((day) => {
+                    const isPast = day.date < today;
+                    return (
+                      <td
+                        key={day.date}
+                        onClick={() => !isPast && handleCellClick(room, day.date)}
+                        className={`p-1.5 align-top transition-all ${
+                          isPast
+                            ? 'bg-slate-100/60 dark:bg-slate-800/30 opacity-60 cursor-not-allowed'
+                            : 'cursor-pointer hover:bg-brand-50/60 dark:hover:bg-slate-800/60'
+                        } ${day.date === today ? 'bg-brand-50/40 dark:bg-brand-950/20' : ''}`}
+                      >
+                        {isPast ? (
+                          day.bookings.length === 0 ? (
+                            <span className="block rounded-lg bg-slate-200/60 dark:bg-slate-800/80 px-2 py-1 text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                              - ผ่านไปแล้ว
                             </span>
-                          ))}
-
-                        </div>
-                      )}
-                    </td>
-                  ))}
+                          ) : (
+                            <div className="grid gap-1 opacity-75">
+                              {day.bookings.map((b, idx) => (
+                                <span
+                                  key={idx}
+                                  className="block rounded-lg border border-slate-300 bg-slate-200/80 px-2 py-1 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                                  title={`${b.bookerName}`}
+                                >
+                                  {formatTime(b.start)}–{formatTime(b.end)} {b.bookerName ? `· ${b.bookerName}` : ''}
+                                </span>
+                              ))}
+                            </div>
+                          )
+                        ) : day.bookings.length === 0 ? (
+                          <span className="block rounded-lg bg-green-50 hover:bg-green-100 px-2 py-1 text-center text-[10px] font-bold text-green-700 dark:bg-green-950/30 dark:text-green-400">
+                            + ว่าง (คลิกจอง)
+                          </span>
+                        ) : (
+                          <div className="grid gap-1">
+                            {day.bookings.map((b, idx) => (
+                              <span
+                                key={idx}
+                                className="block rounded-lg border border-red-200 bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
+                                title={`${b.bookerName} (${b.purpose?.join(', ') || 'จองแล้ว'})`}
+                              >
+                                {formatTime(b.start)}–{formatTime(b.end)} {b.bookerName ? `· ${b.bookerName}` : ''}
+                              </span>
+                            ))}
+                            <span className="block rounded text-center text-[9px] font-bold text-brand-600 dark:text-brand-400 opacity-70 hover:opacity-100">
+                              + จองช่วงเวลาอื่น
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {modalData && meta && (
+        <BookingModal
+          open={Boolean(modalData)}
+          onClose={() => setModalData(null)}
+          room={modalData.room}
+          draft={{ date: modalData.date, period: 'morning', start: 7, end: 8 }}
+          meta={meta}
+          onSuccess={fetchWeekData}
+        />
       )}
     </Card>
   );

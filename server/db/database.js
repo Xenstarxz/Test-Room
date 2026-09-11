@@ -69,7 +69,9 @@ export async function loadDataFromMongo(sqliteDb) {
   }
 }
 
-// ซิงค์ตารางทั้งหมดจาก SQLite ขึ้น MongoDB Atlas
+// ซิงค์ตารางทั้งหมดจาก SQLite ขึ้น MongoDB Atlas แบบ Safe Upsert
+const syncTimeouts = new Map();
+
 export async function syncToMongo(tableName) {
   if (!mongoDb || isMongoSyncing) return;
   try {
@@ -77,21 +79,44 @@ export async function syncToMongo(tableName) {
     const rows = sqliteDb.prepare(`SELECT * FROM ${tableName}`).all();
     const docs = rows.map((r) => ({ ...r, _id: r.id || r.key }));
 
-    await mongoDb.collection(tableName).deleteMany({});
-    if (docs.length > 0) {
-      await mongoDb.collection(tableName).insertMany(docs);
+    const collection = mongoDb.collection(tableName);
+    if (docs.length === 0) {
+      await collection.deleteMany({});
+      return;
     }
+
+    const currentIds = docs.map((d) => d._id);
+    const ops = [
+      { deleteMany: { filter: { _id: { $nin: currentIds } } } },
+      ...docs.map((doc) => ({
+        replaceOne: {
+          filter: { _id: doc._id },
+          replacement: doc,
+          upsert: true,
+        },
+      })),
+    ];
+
+    await collection.bulkWrite(ops, { ordered: false });
   } catch (err) {
     console.error(`[Database] Failed to sync ${tableName} to MongoDB Atlas:`, err.message);
   }
 }
 
-// Helper ซิงค์เมื่อมีการเปลี่ยนแปลง
+// Helper ซิงค์เมื่อมีการเปลี่ยนแปลง (Debounce 500ms ป้องกันการยิงชนกันซ้ำๆ)
 export function scheduleSync(tableName) {
-  setTimeout(() => {
-    syncToMongo(tableName);
-  }, 100);
+  if (syncTimeouts.has(tableName)) {
+    clearTimeout(syncTimeouts.get(tableName));
+  }
+  syncTimeouts.set(
+    tableName,
+    setTimeout(() => {
+      syncTimeouts.delete(tableName);
+      syncToMongo(tableName);
+    }, 500)
+  );
 }
+
 
 export function getDb() {
   if (!db) {

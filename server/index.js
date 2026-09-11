@@ -75,10 +75,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
 });
 
-httpServer.listen(PORT, '0.0.0.0', () => {
-  getDb();
+httpServer.listen(PORT, '0.0.0.0', async () => {
+  const sqlite = getDb();
   console.log(`API server & Real-Time WebSockets running at http://localhost:${PORT}`);
   
+  // โหลดข้อมูลล่าสุดจาก MongoDB Atlas
+  try {
+    const { loadDataFromMongo } = await import('./db/database.js');
+    await loadDataFromMongo(sqlite);
+  } catch (err) {
+    console.error('[Startup Sync Error]', err.message);
+  }
+
   // รัน backup และ retention 1 ครั้งทันทีตอนเปิดเครื่อง แล้วตั้งทุก 24 ชั่วโมง (86400000 ms)
   runBackup();
   runRetention();

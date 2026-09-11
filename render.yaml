@@ -11,3 +11,5 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      - key: MONGODB_URI
+        value: mongodb+srv://shopb69x_db_user:Uh6H4TzhIAVWdiF1@cluster0.fxkw8ys.mongodb.net/room_booking?retryWrites=true&w=majority&appName=Cluster0

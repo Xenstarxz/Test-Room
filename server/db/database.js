@@ -3,12 +3,95 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { MongoClient } from 'mongodb';
 import { ROOMS, ADMIN_USERNAME, ADMIN_DEFAULT_PASSWORD } from '../data/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', 'data', 'room-booking.db');
 
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://shopb69x_db_user:Uh6H4TzhIAVWdiF1@cluster0.fxkw8ys.mongodb.net/room_booking?retryWrites=true&w=majority&appName=Cluster0';
+
 let db;
+let mongoClient = null;
+let mongoDb = null;
+let isMongoSyncing = false;
+
+export async function initMongo() {
+  if (!MONGODB_URI) return null;
+  if (mongoDb) return mongoDb;
+  try {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    mongoDb = mongoClient.db('room_booking');
+    console.log('[Database] Connected to MongoDB Atlas successfully.');
+    return mongoDb;
+  } catch (err) {
+    console.warn('[Database] MongoDB Atlas connection failed, operating with SQLite:', err.message);
+    return null;
+  }
+}
+
+// โหลดข้อมูลล่าสุดจาก MongoDB Atlas เข้า SQLite (ตอนเซิร์ฟเวอร์เริ่มทำงาน)
+export async function loadDataFromMongo(sqliteDb) {
+  const mdb = await initMongo();
+  if (!mdb) return;
+
+  // users และ rooms ต้องมาก่อน bookings/notifications
+  const collections = ['settings', 'users', 'rooms', 'bookings', 'notifications', 'audit_logs', 'user_logs'];
+  try {
+    isMongoSyncing = true;
+    sqliteDb.pragma('foreign_keys = OFF');
+    for (const table of collections) {
+      const docs = await mdb.collection(table).find().toArray();
+      if (docs && docs.length > 0) {
+        sqliteDb.prepare(`DELETE FROM ${table}`).run();
+        const firstDoc = docs[0];
+        const keys = Object.keys(firstDoc).filter((k) => k !== '_id');
+        const placeholders = keys.map(() => '?').join(', ');
+        const insertStmt = sqliteDb.prepare(`INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`);
+
+        const insertMany = sqliteDb.transaction((items) => {
+          for (const item of items) {
+            const values = keys.map((k) => item[k]);
+            insertStmt.run(...values);
+          }
+        });
+        insertMany(docs);
+      }
+    }
+    sqliteDb.pragma('foreign_keys = ON');
+    isMongoSyncing = false;
+    console.log('[Database] Synced all data from MongoDB Atlas into SQLite cache.');
+  } catch (err) {
+    sqliteDb.pragma('foreign_keys = ON');
+    isMongoSyncing = false;
+    console.error('[Database] Failed to load data from MongoDB:', err.message);
+  }
+}
+
+// ซิงค์ตารางทั้งหมดจาก SQLite ขึ้น MongoDB Atlas
+export async function syncToMongo(tableName) {
+  if (!mongoDb || isMongoSyncing) return;
+  try {
+    const sqliteDb = getDb();
+    const rows = sqliteDb.prepare(`SELECT * FROM ${tableName}`).all();
+    const docs = rows.map((r) => ({ ...r, _id: r.id || r.key }));
+
+    await mongoDb.collection(tableName).deleteMany({});
+    if (docs.length > 0) {
+      await mongoDb.collection(tableName).insertMany(docs);
+    }
+  } catch (err) {
+    console.error(`[Database] Failed to sync ${tableName} to MongoDB Atlas:`, err.message);
+  }
+}
+
+// Helper ซิงค์เมื่อมีการเปลี่ยนแปลง
+export function scheduleSync(tableName) {
+  setTimeout(() => {
+    syncToMongo(tableName);
+  }, 100);
+}
 
 export function getDb() {
   if (!db) {
@@ -18,12 +101,40 @@ export function getDb() {
     initSchema(db);
     migrateSchema(db);
     seedData(db);
+
+    // Sync trigger on changes via table hooks
+    hookSqliteWrites(db);
   }
   return db;
 }
 
-// Migration แบบ additive: เพิ่มคอลัมน์/ตารางใหม่โดยไม่ทำลายข้อมูลเดิม
-// เผื่อกรณีมี room-booking.db เก่าอยู่แล้วจากก่อนอัปเดตฟีเจอร์นี้
+function hookSqliteWrites(sqliteDb) {
+  const originalRun = sqliteDb.prepare('SELECT 1').run.constructor.prototype.run;
+  // Hook standard prepare().run to detect mutations
+  const originalPrepare = sqliteDb.prepare.bind(sqliteDb);
+  sqliteDb.prepare = function (sql) {
+    const stmt = originalPrepare(sql);
+    const sqlUpper = sql.trim().toUpperCase();
+    const isMutation = sqlUpper.startsWith('INSERT') || sqlUpper.startsWith('UPDATE') || sqlUpper.startsWith('DELETE');
+
+    if (isMutation) {
+      const origRun = stmt.run.bind(stmt);
+      stmt.run = function (...args) {
+        const result = origRun(...args);
+        // Identify table name
+        const match = sqlUpper.match(/(?:INTO|UPDATE|FROM)\s+([A-Z0-9_]+)/i);
+        if (match && match[1]) {
+          const table = match[1].toLowerCase();
+          scheduleSync(table);
+        }
+        return result;
+      };
+    }
+    return stmt;
+  };
+}
+
+// Migration แบบ additive
 export function createAuditLog(database, { adminId, adminName, action, details, target = null }) {
   database.prepare(`
     INSERT INTO audit_logs (id, admin_id, admin_name, action, details, target, created_at)
@@ -52,7 +163,6 @@ function migrateSchema(database) {
     database.exec("ALTER TABLE rooms ADD COLUMN status TEXT DEFAULT 'active'");
   }
 
-  // migrate audit_logs: เพิ่ม target column ถ้าไม่มี
   const auditCols = database.prepare('PRAGMA table_info(audit_logs)').all().map((c) => c.name);
   if (auditCols.length > 0 && !auditCols.includes('target')) {
     database.exec('ALTER TABLE audit_logs ADD COLUMN target TEXT');
@@ -102,7 +212,6 @@ function migrateSchema(database) {
     );
   `);
 
-  // Seed default settings if not exists
   const existingDays = database.prepare("SELECT value FROM settings WHERE key = 'advance_booking_days'").get();
   if (!existingDays) {
     database.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('advance_booking_days', '90', ?)").run(Date.now());
@@ -112,7 +221,6 @@ function migrateSchema(database) {
     database.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('blackout_dates', '[]', ?)").run(Date.now());
   }
 }
-
 
 function initSchema(database) {
   database.exec(`

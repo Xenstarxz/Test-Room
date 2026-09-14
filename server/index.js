@@ -23,6 +23,9 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
+// Trust Proxy (จำเป็นสำหรับ Render / Cloudflare reverse proxy เพื่อให้อ่าน client IP และ rate-limit ได้ถูกต้อง)
+app.set('trust proxy', 1);
+
 // Security Headers
 app.use(helmet({ contentSecurityPolicy: false }));
 

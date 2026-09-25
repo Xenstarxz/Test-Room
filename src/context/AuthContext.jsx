@@ -33,8 +33,22 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateUser = (nextUserData) => {
+    setUser((prev) => ({ ...prev, ...nextUserData }));
+  };
+
+  const refreshUser = async () => {
+    try {
+      const data = await api.me();
+      setUser(data);
+      return data;
+    } catch {
+      // ignore
+    }
+  };
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, isAdmin: user?.role === 'admin' || Boolean(user?.isAdmin) }),
+    () => ({ user, loading, login, register, logout, updateUser, refreshUser, isAdmin: user?.role === 'admin' || Boolean(user?.isAdmin) }),
     [user, loading]
   );
 

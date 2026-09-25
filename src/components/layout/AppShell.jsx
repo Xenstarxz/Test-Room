@@ -9,6 +9,9 @@ import Input from '../ui/Input.jsx';
 import NotificationBell from '../notifications/NotificationBell.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 
+import ProfileModal from '../profile/ProfileModal.jsx';
+import UserAvatar from '../common/UserAvatar.jsx';
+
 const tabs = [
   { to: '/dashboard', label: 'หน้าหลัก' },
   { to: '/booking', label: 'จองห้อง' },
@@ -16,21 +19,16 @@ const tabs = [
   { to: '/my-bookings', label: 'การจองของฉัน' },
   { to: '/list', label: 'รายการจอง' },
   { to: '/stats', label: 'สถิติ' },
-  { to: '/guide', label: 'วิธีใช้งาน' },
   { to: '/admin', label: 'จัดการระบบ', admin: true },
 ];
 
 export default function AppShell() {
   const { user, logout, isAdmin } = useAuth();
   const { toggleTheme, isDark } = useTheme();
-  const { showToast } = useToast();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pwdOpen, setPwdOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [pending, setPending] = useState({ pendingUsers: 0, pendingBookings: 0 });
-  const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', newPasswordConfirm: '' });
-  const [pwdError, setPwdError] = useState('');
-  const [pwdLoading, setPwdLoading] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -40,30 +38,14 @@ export default function AppShell() {
     return () => clearInterval(id);
   }, [isAdmin]);
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setPwdError('');
-    setPwdLoading(true);
-    try {
-      await api.changePassword(pwdForm);
-      showToast('เปลี่ยนรหัสผ่านสำเร็จ');
-      setPwdOpen(false);
-      setPwdForm({ oldPassword: '', newPassword: '', newPasswordConfirm: '' });
-    } catch (err) {
-      setPwdError(err.message);
-    } finally {
-      setPwdLoading(false);
-    }
-  };
-
   const adminBadge = isAdmin ? pending.pendingUsers + pending.pendingBookings : 0;
 
   return (
     <div className="min-h-screen pb-20 md:pb-10">
       <header className="no-print sticky top-0 z-30 bg-brand-700 text-white shadow-lg dark:bg-slate-900 dark:border-b dark:border-slate-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/20 text-lg font-extrabold">▦</span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/20 text-lg font-extrabold shadow-inner">▦</span>
             <div>
               <h1 className="text-base font-bold sm:text-lg">ระบบจองห้อง</h1>
               <p className="hidden text-xs text-white/70 sm:block">{user?.displayName}</p>
@@ -71,7 +53,7 @@ export default function AppShell() {
           </div>
           <div className="flex items-center gap-2">
             {adminBadge > 0 && (
-              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-brand-700">{adminBadge} รออนุมัติ</span>
+              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-brand-700 shadow-xs">{adminBadge} รออนุมัติ</span>
             )}
             <Button variant="ghost" size="sm" className="!text-white hover:!bg-white/20" onClick={toggleTheme}>
               {isDark ? '☀' : '☾'}
@@ -79,18 +61,60 @@ export default function AppShell() {
             <div data-tour="notification-bell">
               <NotificationBell />
             </div>
+            
+            {/* User Profile Quick Button & Menu */}
             <div className="relative">
-              <Button variant="ghost" size="sm" className="!text-white hover:!bg-white/20" onClick={() => setMenuOpen((v) => !v)}>
-                {isAdmin && <span className="mr-1 rounded bg-white/20 px-1.5 text-[10px] font-extrabold">Admin</span>}
-                เมนู ▾
-              </Button>
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl bg-white/10 px-2 py-1 text-left text-xs font-semibold text-white transition-all hover:bg-white/20 active:scale-95 cursor-pointer"
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                <UserAvatar
+                  avatar={user?.avatar}
+                  name={user?.displayName}
+                  size="sm"
+                  className="ring-1 ring-white/30"
+                />
+                <span className="hidden max-w-[120px] truncate sm:inline-block">
+                  {user?.displayName || 'ผู้ใช้งาน'}
+                </span>
+                {isAdmin && <span className="rounded bg-amber-400 px-1 text-[9px] font-black text-amber-950 uppercase">Admin</span>}
+                <span className="text-[10px] opacity-70">▾</span>
+              </button>
+
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
-                  <div className="px-3 py-2 sm:hidden border-b border-slate-100 dark:border-slate-700 mb-1">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">{user?.displayName}</p>
+                <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl dark:border-slate-700 dark:bg-slate-800 animate-fadeIn z-50">
+                  <div className="mb-1 flex items-center gap-2.5 rounded-xl bg-slate-50 p-2.5 text-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
+                    <UserAvatar
+                      avatar={user?.avatar}
+                      name={user?.displayName}
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold">{user?.displayName}</p>
+                      <p className="truncate text-xs text-slate-400">@{user?.username}</p>
+                      {user?.department && (
+                        <p className="mt-0.5 truncate text-[11px] font-medium text-brand-600 dark:text-brand-400">
+                          {user?.department}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <button type="button" className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700" onClick={() => { setPwdOpen(true); setMenuOpen(false); }}>เปลี่ยนรหัสผ่าน</button>
-                  <button type="button" className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30" onClick={() => { logout(); navigate('/login'); }}>ออกจากระบบ</button>
+                  
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 dark:text-slate-200 dark:hover:bg-slate-700"
+                    onClick={() => { setProfileOpen(true); setMenuOpen(false); }}
+                  >
+                    <span>👤</span> โปรไฟล์ส่วนตัว
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    onClick={() => { logout(); navigate('/login'); }}
+                  >
+                    <span>🚪</span> ออกจากระบบ
+                  </button>
                 </div>
               )}
             </div>
@@ -142,18 +166,7 @@ export default function AppShell() {
         <Outlet />
       </main>
 
-      <Modal open={pwdOpen} onClose={() => setPwdOpen(false)} title="เปลี่ยนรหัสผ่าน" size="sm">
-        <form className="grid gap-3" onSubmit={handleChangePassword}>
-          <Input label="รหัสผ่านปัจจุบัน" type="password" value={pwdForm.oldPassword} onChange={(e) => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} required />
-          <Input label="รหัสผ่านใหม่" type="password" value={pwdForm.newPassword} onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })} required />
-          <Input label="ยืนยันรหัสผ่านใหม่" type="password" value={pwdForm.newPasswordConfirm} onChange={(e) => setPwdForm({ ...pwdForm, newPasswordConfirm: e.target.value })} required />
-          {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" loading={pwdLoading}>บันทึก</Button>
-            <Button variant="neutral" onClick={() => setPwdOpen(false)}>ยกเลิก</Button>
-          </div>
-        </form>
-      </Modal>
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

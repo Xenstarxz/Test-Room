@@ -9,13 +9,16 @@ const router = Router();
 router.get('/', authRequired, adminRequired, (req, res) => {
   const db = getDb();
   // ดึงผู้ใช้งานทั้งหมด เพื่อให้ Admin สามารถดูและจัดการยศ/สิทธิ์ของผู้ใช้ทุกคนได้
-  const users = db.prepare('SELECT id, username, display_name, role, approved, created_at FROM users ORDER BY approved ASC, created_at ASC').all();
+  const users = db.prepare('SELECT id, username, display_name, role, approved, phone, department, avatar, created_at FROM users ORDER BY approved ASC, created_at ASC').all();
   res.json(users.map((u) => ({
     id: u.id,
     username: u.username,
     displayName: u.display_name,
     role: u.role || 'user',
     approved: Boolean(u.approved),
+    phone: u.phone || '',
+    department: u.department || '',
+    avatar: u.avatar || '',
     createdAt: u.created_at,
   })));
 });

@@ -30,6 +30,7 @@ export const api = {
   login: (body) => request('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   register: (body) => request('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   me: () => request('/auth/me'),
+  updateProfile: (body) => request('/auth/profile', { method: 'PUT', body: JSON.stringify(body) }),
   changePassword: (body) => request('/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
 
   getRooms: () => request('/rooms'),

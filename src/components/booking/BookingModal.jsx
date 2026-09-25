@@ -184,6 +184,17 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => (isEdit ? formFromBooking(editingBooking, meta) : emptyForm(draft, meta)));
   const [equipmentAvail, setEquipmentAvail] = useState({});
+  const [needEquipment, setNeedEquipment] = useState(() => {
+    if (isEdit) {
+      const counts = parseEquipmentCounts(editingBooking?.equipment || [], meta?.equipment || []);
+      const hasAny = Object.values(counts).some((v) => v > 0);
+      return hasAny;
+    }
+    return false;
+  });
+  const [hasOtherEquipment, setHasOtherEquipment] = useState(() => {
+    return isEdit && Boolean(editingBooking?.otherEquipment?.trim());
+  });
 
   const actualStart = form.period === 'fullday' ? meta?.timeWindows?.fullday?.start : form.start;
   const actualEnd = form.period === 'fullday' ? meta?.timeWindows?.fullday?.end : form.end;
@@ -195,6 +206,10 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
       setStep(1);
       setError('');
       setForm(isEdit ? formFromBooking(editingBooking, meta) : emptyForm(draft, meta));
+      const counts = isEdit ? parseEquipmentCounts(editingBooking?.equipment || [], meta?.equipment || []) : {};
+      const hasAny = Object.values(counts).some((v) => v > 0);
+      setNeedEquipment(hasAny);
+      setHasOtherEquipment(isEdit && Boolean(editingBooking?.otherEquipment?.trim()));
     }
     wasOpen.current = open;
   }, [open, draft, isEdit, editingBooking, meta]);
@@ -282,9 +297,11 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
       ? purposeNotes.join(' | ')
       : (form.otherPurpose?.trim() || '');
 
-    const equipmentList = Object.entries(form.equipmentCounts || {})
-      .filter(([_, qty]) => qty > 0)
-      .map(([item, qty]) => `${item} (${qty} ${getLimit(meta, item).unit || 'ชิ้น'})`);
+    const equipmentList = needEquipment
+      ? Object.entries(form.equipmentCounts || {})
+          .filter(([_, qty]) => qty > 0)
+          .map(([item, qty]) => `${item} (${qty} ${getLimit(meta, item).unit || 'ชิ้น'})`)
+      : [];
 
     return {
       roomId: room.id,
@@ -297,7 +314,7 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
       subjects: form.subjects,
       equipment: equipmentList,
       otherPurpose: combinedOtherPurpose,
-      otherEquipment: form.otherEquipment,
+      otherEquipment: hasOtherEquipment ? (form.otherEquipment || '').trim() : '',
     };
   };
 
@@ -388,7 +405,7 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
       <div className="mb-4 flex justify-between text-[11px] font-bold text-slate-400">
         <span className={step === 1 ? 'text-brand-600 dark:text-brand-400' : ''}>1. วันเวลา</span>
         <span className={step === 2 ? 'text-brand-600 dark:text-brand-400' : ''}>2. รายละเอียด</span>
-        <span className={step === 3 ? 'text-brand-600 dark:text-brand-400' : ''}>3. อุปกรณ์</span>
+        <span className={step === 3 ? 'text-brand-600 dark:text-brand-400' : ''}>3. อุปกรณ์พื้นฐาน</span>
       </div>
 
       <div className="mb-4 rounded-xl bg-brand-50 p-3 text-sm dark:bg-cyan-950/40">
@@ -593,110 +610,169 @@ export default function BookingModal({ open, onClose, room, draft, meta, onSucce
           <fieldset>
             <div className="mb-2.5 flex items-center justify-between">
               <legend className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                ขออุปกรณ์เพิ่มเติม
+                อุปกรณ์พื้นฐาน
               </legend>
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 จำกัดโควต้าตามจำนวนของที่มี
               </span>
             </div>
 
-            {/* การ์ดอุปกรณ์พร้อม Stepper (Min/Max/Stock) และแถบสีบ่งบอกสถานะช่วงโควต้า */}
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {meta.equipment.map((item) => {
-                const limit = getLimit(meta, item);
-                const stockInfo = equipmentAvail[item];
-                const availableStock = stockInfo ? stockInfo.available : (meta?.equipmentStock?.[item] ?? limit.max);
-                const totalStock = stockInfo ? stockInfo.totalStock : (meta?.equipmentStock?.[item] ?? limit.max);
-                const maxAllowed = Math.min(limit.max, availableStock);
-                const count = form.equipmentCounts?.[item] || 0;
-                const status = getEquipmentStatus(count, limit.max, availableStock);
+            {/* Checkbox หลัก: อุปกรณ์พื้นฐาน */}
+            <div
+              className={`rounded-xl border p-3 transition-all ${
+                needEquipment
+                  ? 'border-brand-300 bg-brand-50/20 dark:border-brand-800 dark:bg-brand-950/10'
+                  : 'border-slate-200/80 hover:border-slate-300 dark:border-slate-700/80'
+              }`}
+            >
+              <label className="flex items-center gap-2.5 text-sm font-semibold cursor-pointer select-none text-slate-800 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={needEquipment}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setNeedEquipment(checked);
+                    if (!checked) {
+                      // เมื่อยกเลิก ให้รีเซ็ตจำนวนอุปกรณ์ทั้งหมดเป็น 0
+                      const resetCounts = {};
+                      meta.equipment.forEach((it) => { resetCounts[it] = 0; });
+                      setForm((f) => ({ ...f, equipmentCounts: resetCounts, equipment: [] }));
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span>อุปกรณ์พื้นฐาน</span>
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                  (ไมค์, สายต่อจอ, พอยเตอร์ ฯลฯ)
+                </span>
+              </label>
 
-                return (
-                  <div
-                    key={item}
-                    className={`flex flex-col justify-between rounded-xl border p-3 transition-all duration-200 ${status.cardClass}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={count > 0}
-                          disabled={availableStock <= 0 && count === 0}
-                          onChange={(e) => {
-                            const newCount = e.target.checked ? Math.max(1, Math.min(maxAllowed, 1)) : 0;
-                            setEquipmentCount(item, newCount);
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-40"
-                        />
-                        <span className="text-base" aria-hidden="true">{limit.icon}</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{item}</span>
-                      </label>
+              {/* เมื่อติ๊กถูก จะกางตัวเลือกอุปกรณ์แต่ละรายการออกมา */}
+              {needEquipment && (
+                <div className="mt-3 grid grid-cols-1 gap-2.5 pl-6.5 sm:grid-cols-2 animate-fadeIn">
+                  {meta.equipment.map((item) => {
+                    const limit = getLimit(meta, item);
+                    const stockInfo = equipmentAvail[item];
+                    const availableStock = stockInfo ? stockInfo.available : (meta?.equipmentStock?.[item] ?? limit.max);
+                    const totalStock = stockInfo ? stockInfo.totalStock : (meta?.equipmentStock?.[item] ?? limit.max);
+                    const maxAllowed = Math.min(limit.max, availableStock);
+                    const count = form.equipmentCounts?.[item] || 0;
+                    const status = getEquipmentStatus(count, limit.max, availableStock);
 
-                      {/* Stepper (+ / -) พร้อม Min/Max/Available */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEquipmentCount(item, Math.max(limit.min, count - 1))}
-                          disabled={count <= limit.min}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-700 shadow-xs hover:bg-slate-100 active:scale-95 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                          aria-label={`ลดจำนวน ${item}`}
-                        >
-                          -
-                        </button>
-                        <span className="w-6 text-center text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
-                          {count}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setEquipmentCount(item, Math.min(maxAllowed, count + 1))}
-                          disabled={count >= maxAllowed || availableStock <= 0}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-700 shadow-xs hover:bg-slate-100 active:scale-95 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                          aria-label={`เพิ่มจำนวน ${item}`}
-                        >
-                          +
-                        </button>
+                    return (
+                      <div
+                        key={item}
+                        className={`flex flex-col justify-between rounded-xl border p-3 transition-all duration-200 ${status.cardClass}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={count > 0}
+                              disabled={availableStock <= 0 && count === 0}
+                              onChange={(e) => {
+                                const newCount = e.target.checked ? Math.max(1, Math.min(maxAllowed, 1)) : 0;
+                                setEquipmentCount(item, newCount);
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-40"
+                            />
+                            <span className="text-base" aria-hidden="true">{limit.icon}</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{item}</span>
+                          </label>
+
+                          {/* Stepper (+ / -) พร้อม Min/Max/Available */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEquipmentCount(item, Math.max(limit.min, count - 1))}
+                              disabled={count <= limit.min}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-700 shadow-xs hover:bg-slate-100 active:scale-95 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                              aria-label={`ลดจำนวน ${item}`}
+                            >
+                              -
+                            </button>
+                            <span className="w-6 text-center text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                              {count}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setEquipmentCount(item, Math.min(maxAllowed, count + 1))}
+                              disabled={count >= maxAllowed || availableStock <= 0}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-white text-base font-bold text-slate-700 shadow-xs hover:bg-slate-100 active:scale-95 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                              aria-label={`เพิ่มจำนวน ${item}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Range Status & Color Bar */}
+                        <div className="mt-2.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ${status.badgeClass}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
+                              {status.label}
+                            </span>
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">
+                              เหลือ {availableStock} {limit.unit}
+                            </span>
+                          </div>
+
+                          {/* Visual Progress Bar */}
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80">
+                            <div
+                              className={`h-full transition-all duration-300 ${status.barClass}`}
+                              style={{ width: `${Math.min(100, limit.max > 0 ? (count / limit.max) * 100 : 0)}%` }}
+                            />
+                          </div>
+
+                          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+                            <span>โควตาต่อครั้ง: สูงสุด {limit.max} {limit.unit}</span>
+                            <span>สต็อกรวม {totalStock} {limit.unit}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Range Status & Color Bar */}
-                    <div className="mt-2.5">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ${status.badgeClass}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
-                          {status.label}
-                        </span>
-                        <span className="font-semibold text-slate-600 dark:text-slate-300">
-                          เหลือ {availableStock} {limit.unit}
-                        </span>
-                      </div>
-
-                      {/* Visual Progress Bar */}
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80">
-                        <div
-                          className={`h-full transition-all duration-300 ${status.barClass}`}
-                          style={{ width: `${Math.min(100, limit.max > 0 ? (count / limit.max) * 100 : 0)}%` }}
-                        />
-                      </div>
-
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
-                        <span>โควตาต่อครั้ง: สูงสุด {limit.max} {limit.unit}</span>
-                        <span>สต็อกรวม {totalStock} {limit.unit}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="mt-3">
-              <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                อุปกรณ์อื่นๆ หรือหมายเหตุเพิ่มเติม
+            {/* Checkbox: อื่นๆ */}
+            <div
+              className={`mt-2.5 rounded-xl border p-3 transition-all ${
+                hasOtherEquipment
+                  ? 'border-brand-300 bg-brand-50/20 dark:border-brand-800 dark:bg-brand-950/10'
+                  : 'border-slate-200/80 hover:border-slate-300 dark:border-slate-700/80'
+              }`}
+            >
+              <label className="flex items-center gap-2.5 text-sm font-semibold cursor-pointer select-none text-slate-800 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={hasOtherEquipment}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setHasOtherEquipment(checked);
+                    if (!checked) {
+                      setForm((f) => ({ ...f, otherEquipment: '' }));
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span>อื่นๆ (อุปกรณ์นอกเหนือจากรายการข้างต้น)</span>
               </label>
-              <Input
-                placeholder="ระบุอุปกรณ์อื่นๆ ที่ต้องการนอกเหนือจากรายการด้านบน (ถ้ามี)"
-                value={form.otherEquipment}
-                onChange={(e) => setForm({ ...form, otherEquipment: e.target.value })}
-              />
+
+              {/* เมื่อติ๊กอื่นๆ ถึงจะแสดงกล่อง Input ให้พิมพ์ */}
+              {hasOtherEquipment && (
+                <div className="mt-2.5 pl-6.5 animate-fadeIn">
+                  <Input
+                    placeholder="ระบุอุปกรณ์อื่นๆ ที่ต้องการ หรือหมายเหตุเพิ่มเติม"
+                    value={form.otherEquipment}
+                    onChange={(e) => setForm({ ...form, otherEquipment: e.target.value })}
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
           </fieldset>
 

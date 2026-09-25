@@ -9,6 +9,7 @@ import { formatThaiDate, formatTime } from '../utils/date.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
+import UserAvatar from '../components/common/UserAvatar.jsx';
 
 const ROLE_CONFIG = {
   admin: {
@@ -732,12 +733,18 @@ export default function AdminPage() {
                         <tr key={u.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                           <td className="p-3.5">
                             <div className="flex items-center gap-2.5">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-lg font-black shadow-inner">
-                                {cfg.icon}
-                              </div>
+                              <UserAvatar
+                                avatar={u.avatar}
+                                name={u.displayName}
+                                size="md"
+                              />
                               <div>
                                 <p className="font-bold text-slate-900 dark:text-slate-100">{u.displayName}</p>
-                                <span className="text-[11px] text-slate-400">ID: {u.id.substring(0, 8)}...</span>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                  {u.department && <span>🏛️ {u.department}</span>}
+                                  {u.phone && <span>📞 {u.phone}</span>}
+                                  {!u.department && !u.phone && <span>ID: {u.id.substring(0, 8)}...</span>}
+                                </div>
                               </div>
                             </div>
                           </td>

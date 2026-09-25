@@ -7,6 +7,7 @@ import { createUserLog } from '../db/database.js';
 import { signToken, authRequired } from '../middleware/auth.js';
 import { ADMIN_USERNAME } from '../data/constants.js';
 import { getAllSettings } from './settings.js';
+import { emitEvent } from '../utils/socket.js';
 
 const router = Router();
 
@@ -52,6 +53,9 @@ router.post('/login', loginLimiter, (req, res) => {
       displayName: user.display_name,
       role: user.role,
       isAdmin: user.role === 'admin',
+      phone: user.phone || '',
+      department: user.department || '',
+      avatar: user.avatar || '',
     },
   });
 });
@@ -108,14 +112,77 @@ router.post('/register', loginLimiter, (req, res) => {
 
 router.get('/me', authRequired, (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, username, display_name, role, approved FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, username, display_name, role, approved, phone, department, avatar, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'ไม่พบผู้ใช้งาน' });
+
+  const bookingCount = db.prepare("SELECT COUNT(*) as c FROM bookings WHERE user_id = ? AND status != 'cancelled'").get(user.id).c;
+
   res.json({
     id: user.id,
     username: user.username,
     displayName: user.display_name,
     role: user.role,
     isAdmin: user.role === 'admin',
+    phone: user.phone || '',
+    department: user.department || '',
+    avatar: user.avatar || '',
+    createdAt: user.created_at,
+    bookingCount,
+  });
+});
+
+// อัปเดตข้อมูลโปรไฟล์ส่วนตัว (ชื่อแสดงผล, เบอร์โทร, แผนก/สังกัด, อวาตาร์)
+router.put('/profile', authRequired, (req, res) => {
+  const { displayName, phone, department, avatar } = req.body || {};
+  if (!displayName?.trim()) {
+    return res.status(400).json({ error: 'กรุณาระบุชื่อ-นามสกุล / ชื่อแสดงผล' });
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'ไม่พบผู้ใช้งาน' });
+
+  const nextDisplayName = displayName.trim();
+  const nextPhone = (phone || '').trim();
+  const nextDepartment = (department || '').trim();
+  const nextAvatar = (avatar || '').trim();
+
+  db.prepare(`
+    UPDATE users 
+    SET display_name = ?, phone = ?, department = ?, avatar = ? 
+    WHERE id = ?
+  `).run(nextDisplayName, nextPhone, nextDepartment, nextAvatar, user.id);
+
+  // ปรับปรุงชื่อผู้จองในรายการจองเดิมที่ยังไม่ถูกยกเลิกด้วย
+  db.prepare(`
+    UPDATE bookings 
+    SET booker_name = ? 
+    WHERE user_id = ?
+  `).run(nextDisplayName, user.id);
+
+  createUserLog(db, {
+    userId: user.id,
+    userName: nextDisplayName,
+    action: 'UPDATE_PROFILE',
+    details: `อัปเดตข้อมูลโปรไฟล์ | ชื่อ: ${nextDisplayName} | สังกัด: ${nextDepartment || '-'} | เบอร์: ${nextPhone || '-'}`,
+    meta: { displayName: nextDisplayName, phone: nextPhone, department: nextDepartment },
+  });
+
+  emitEvent('USERS_UPDATED');
+  emitEvent('BOOKINGS_UPDATED');
+
+  res.json({
+    message: 'อัปเดตข้อมูลโปรไฟล์เรียบร้อยแล้ว',
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: nextDisplayName,
+      role: user.role,
+      isAdmin: user.role === 'admin',
+      phone: nextPhone,
+      department: nextDepartment,
+      avatar: nextAvatar,
+    },
   });
 });
 

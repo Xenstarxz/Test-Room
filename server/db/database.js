@@ -46,17 +46,21 @@ export async function loadDataFromMongo(sqliteDb) {
       if (docs && docs.length > 0) {
         sqliteDb.prepare(`DELETE FROM ${table}`).run();
         const firstDoc = docs[0];
-        const keys = Object.keys(firstDoc).filter((k) => k !== '_id');
-        const placeholders = keys.map(() => '?').join(', ');
-        const insertStmt = sqliteDb.prepare(`INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`);
+        // ดึงเฉพาะ column ที่มีอยู่จริงใน sqlite table ป้องกัน error คอลัมน์ขาดหรือเกิน
+        const tableCols = sqliteDb.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+        const keys = Object.keys(firstDoc).filter((k) => k !== '_id' && tableCols.includes(k));
+        if (keys.length > 0) {
+          const placeholders = keys.map(() => '?').join(', ');
+          const insertStmt = sqliteDb.prepare(`INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`);
 
-        const insertMany = sqliteDb.transaction((items) => {
-          for (const item of items) {
-            const values = keys.map((k) => item[k]);
-            insertStmt.run(...values);
-          }
-        });
-        insertMany(docs);
+          const insertMany = sqliteDb.transaction((items) => {
+            for (const item of items) {
+              const values = keys.map((k) => item[k]);
+              insertStmt.run(...values);
+            }
+          });
+          insertMany(docs);
+        }
       }
     }
     sqliteDb.pragma('foreign_keys = ON');
@@ -191,6 +195,17 @@ function migrateSchema(database) {
   const auditCols = database.prepare('PRAGMA table_info(audit_logs)').all().map((c) => c.name);
   if (auditCols.length > 0 && !auditCols.includes('target')) {
     database.exec('ALTER TABLE audit_logs ADD COLUMN target TEXT');
+  }
+
+  const userCols = database.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!userCols.includes('phone')) {
+    database.exec("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''");
+  }
+  if (!userCols.includes('department')) {
+    database.exec("ALTER TABLE users ADD COLUMN department TEXT DEFAULT ''");
+  }
+  if (!userCols.includes('avatar')) {
+    database.exec("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''");
   }
 
   database.exec(`

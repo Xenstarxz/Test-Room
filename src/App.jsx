@@ -8,7 +8,6 @@ import WeekViewPage from './pages/WeekViewPage.jsx';
 import MyBookingsPage, { ListPage } from './pages/ListPage.jsx';
 import StatsPage from './pages/StatsPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
-import GuidePage from './pages/GuidePage.jsx';
 import { EmptyState } from './components/ui/Badge.jsx';
 
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -43,7 +42,6 @@ export default function App() {
         <Route path="my-bookings" element={<MyBookingsPage />} />
         <Route path="list" element={<ListPage />} />
         <Route path="stats" element={<StatsPage />} />
-        <Route path="guide" element={<GuidePage />} />
         <Route path="admin" element={<AdminRoute />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

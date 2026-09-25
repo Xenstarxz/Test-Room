@@ -13,6 +13,7 @@ dist-ssr
 *.local
 server/data/*.db
 server/data/*.db-*
+server/data/backups/
 
 # Editor directories and files
 .vscode/*

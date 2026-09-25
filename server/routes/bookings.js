@@ -32,25 +32,29 @@ function createNotification(db, { userId, bookingId, type, message }) {
 
 router.get('/', authRequired, (req, res) => {
   const db = getDb();
-  let query = 'SELECT * FROM bookings WHERE 1=1';
+  let query = 'SELECT bookings.*, users.phone AS booker_phone, users.department AS booker_department FROM bookings LEFT JOIN users ON bookings.user_id = users.id WHERE 1=1';
   const params = [];
 
   const { roomId, date, status, userId, dateFrom, dateTo, mine } = req.query;
 
   if (mine === 'true') {
-    query += ' AND user_id = ?';
+    query += ' AND bookings.user_id = ?';
     params.push(req.user.id);
   }
-  if (roomId) { query += ' AND room_id = ?'; params.push(roomId); }
-  if (date) { query += ' AND date = ?'; params.push(date); }
-  if (status) { query += ' AND status = ?'; params.push(status); }
-  if (userId && req.user.role === 'admin') { query += ' AND user_id = ?'; params.push(userId); }
-  if (dateFrom) { query += ' AND date >= ?'; params.push(dateFrom); }
-  if (dateTo) { query += ' AND date <= ?'; params.push(dateTo); }
+  if (roomId) { query += ' AND bookings.room_id = ?'; params.push(roomId); }
+  if (date) { query += ' AND bookings.date = ?'; params.push(date); }
+  if (status) { query += ' AND bookings.status = ?'; params.push(status); }
+  if (userId && req.user.role === 'admin') { query += ' AND bookings.user_id = ?'; params.push(userId); }
+  if (dateFrom) { query += ' AND bookings.date >= ?'; params.push(dateFrom); }
+  if (dateTo) { query += ' AND bookings.date <= ?'; params.push(dateTo); }
 
-  query += ' ORDER BY date ASC, start_time ASC, created_at DESC';
+  query += ' ORDER BY bookings.date ASC, bookings.start_time ASC, bookings.created_at DESC';
   const rows = db.prepare(query).all(...params);
-  res.json(rows.map(parseBookingRow));
+  res.json(rows.map((row) => ({
+    ...parseBookingRow(row),
+    bookerPhone: row.booker_phone || '',
+    bookerDepartment: row.booker_department || '',
+  })));
 });
 
 router.get('/check/conflicts', authRequired, (req, res) => {

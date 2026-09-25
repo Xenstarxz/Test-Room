@@ -875,7 +875,21 @@ export default function AdminPage() {
                       <td className="p-3 font-semibold">{b.roomName}</td>
                       <td className="p-3">{formatThaiDate(b.date)}</td>
                       <td className="p-3">{formatTime(b.start)}–{formatTime(b.end)}</td>
-                      <td className="p-3">{b.bookerName}</td>
+                      <td className="p-3">
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">{b.bookerName}</p>
+                        {b.bookerPhone && (
+                          <a href={`tel:${b.bookerPhone}`} className="mt-0.5 flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 transition-colors">
+                            <span>📞</span>
+                            <span className="font-mono font-semibold">{b.bookerPhone}</span>
+                          </a>
+                        )}
+                        {b.bookerDepartment && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+                            <span>🏛️</span>
+                            <span>{b.bookerDepartment}</span>
+                          </p>
+                        )}
+                      </td>
                       <td className="p-3 max-w-[170px]" title={b.otherPurpose || ''}>
                         <div className="truncate">{[...b.purpose, ...b.subjects].join(', ') || '-'}</div>
                         {b.otherPurpose && (
